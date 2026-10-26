@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vòng Quay Ngôi Sao Tri Thức</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- Babel -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- KaTeX & mhchem -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/mhchem.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+
+    <style>
+        @keyframes spin-slow { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes zoomIn { from { transform: scale(0); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-10px); } 75% { transform: translateX(10px); } }
+        
+        /* Hiệu ứng Laser nền */
+        @keyframes laser-sweep { 
+            0% { transform: rotate(0deg); opacity: 0.3; } 
+            50% { opacity: 0.6; }
+            100% { transform: rotate(360deg); opacity: 0.3; } 
+        }
+
+        /* Orbit Animations - Xoay tròn cùng chiều kim đồng hồ 
+           Bán kính quỹ đạo: 12vw
+        */
+        @keyframes orbit-cw {
+            from { transform: rotate(0deg) translateX(12vw) rotate(0deg); }
+            to   { transform: rotate(360deg) translateX(12vw) rotate(-360deg); }
+        }
+
+        .animate-spin-slow { animation: spin-slow 10s linear infinite; }
+        .animate-zoomIn { animation: zoomIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        .animate-shake { animation: shake 0.4s ease-in-out; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #1e293b; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #64748b; }
+
+        /* Laser Container */
+        .laser-container {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            overflow: hidden;
+            z-index: 0;
+        }
+        .laser-beam {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 200vw;
+            height: 200vw;
+            transform: translate(-50%, -50%);
+            background: conic-gradient(
+                from 0deg,
+                transparent 0deg,
+                rgba(6, 182, 212, 0.05) 10deg,
+                rgba(59, 130, 246, 0.3) 45deg,
+                rgba(147, 51, 234, 0.05) 80deg,
+                transparent 90deg,
+                transparent 180deg,
+                rgba(236, 72, 153, 0.05) 190deg,
+                rgba(239, 68, 68, 0.3) 225deg,
+                rgba(245, 158, 11, 0.05) 260deg,
+                transparent 270deg
+            );
+            animation: laser-sweep 25s linear infinite;
+            mix-blend-mode: screen;
+            filter: blur(30px);
+        }
+        .laser-beam-2 {
+            animation-direction: reverse;
+            animation-duration: 30s;
+            filter: blur(40px);
+            opacity: 0.5;
+        }
+        /* Olympic Rings Style */
+        .olympic-ring {
+            position: absolute;
+            border-radius: 50%;
+            border: 8px solid; 
+            opacity: 0.4;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 0 20px currentColor, inset 0 0 5px currentColor;
+        }
+    </style>
+</head>
+<body class="bg-black text-white overflow-hidden">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // --- ICONS ---
+        const Icon = ({ path, size = 20, className = "" }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+                {path}
+            </svg>
+        );
+
+        const Icons = {
+            Star: (props) => <Icon {...props} path={<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />} />,
+            Settings: (props) => <Icon {...props} path={<><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.1a2 2 0 0 1-1-1.72v-.51a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></>} />,
+            Play: (props) => <Icon {...props} path={<polygon points="5 3 19 12 5 21 5 3" />} />,
+            HelpCircle: (props) => <Icon {...props} path={<><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></>} />,
+            X: (props) => <Icon {...props} path={<><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>} />,
+            Plus: (props) => <Icon {...props} path={<><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></>} />,
+            Trash2: (props) => <Icon {...props} path={<><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></>} />,
+            Check: (props) => <Icon {...props} path={<polyline points="20 6 9 17 4 12"/>} />,
+            AlertCircle: (props) => <Icon {...props} path={<><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></>} />,
+            Volume2: (props) => <Icon {...props} path={<><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></>} />,
+            VolumeX: (props) => <Icon {...props} path={<><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></>} />,
+            Upload: (props) => <Icon {...props} path={<><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></>} />,
+            FileText: (props) => <Icon {...props} path={<><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></>} />,
+            ImageIcon: (props) => <Icon {...props} path={<><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></>} />,
+            Save: (props) => <Icon {...props} path={<><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></>} />,
+            RefreshCw: (props) => <Icon {...props} path={<><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></>} />,
+            FolderPlus: (props) => <Icon {...props} path={<><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2v1"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></>} />,
+            UserMinus: (props) => <Icon {...props} path={<><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="23" y1="11" x2="17" y2="11"/></>} />,
+            FileSpreadsheet: (props) => <Icon {...props} path={<><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><path d="M8 13h2"/><path d="M8 17h2"/><path d="M14 13h2"/><path d="M14 17h2"/></>} />,
+            Palette: (props) => <Icon {...props} path={<><path d="M12 2a10 10 0 1 0 10 10 4 4 0 0 1-5-5 4 4 0 0 1-4-4 10.1 10.1 0 0 0-1-1z"/><path d="M8.5 7.5a2.5 2.5 0 1 0-5 0 2.5 2.5 0 0 0 5 0z"/><path d="M14 5.5a2.5 2.5 0 1 0-5 0 2.5 2.5 0 0 0 5 0z"/><path d="M16.5 10.5a2.5 2.5 0 1 0-5 0 2.5 2.5 0 0 0 5 0z"/><path d="M11.5 16.5a2.5 2.5 0 1 0-5 0 2.5 2.5 0 0 0 5 0z"/></>} />,
+            Sigma: (props) => <Icon {...props} path={<polyline points="18 7 9.3 7 5.2 12 9.3 17 18 17"/>} />,
+            Shuffle: (props) => <Icon {...props} path={<><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></>} />,
+            Edit: (props) => <Icon {...props} path={<><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></>} />,
+            Film: (props) => <Icon {...props} path={<><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="2" y1="7" x2="7" y2="7"/><line x1="2" y1="17" x2="7" y2="17"/><line x1="17" y1="17" x2="22" y2="17"/><line x1="17" y1="7" x2="22" y2="7"/></>} />,
+            Music: (props) => <Icon {...props} path={<><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></>} />
+        };
+
+        // --- AUDIO ---
+        const AudioSynth = {
+            ctx: null,
+            init: () => {
+                if (!AudioSynth.ctx) AudioSynth.ctx = new (window.AudioContext || window.webkitAudioContext)();
+            },
+            playTone: (freq, type, duration) => {
+                if (!AudioSynth.ctx) return;
+                const osc = AudioSynth.ctx.createOscillator();
+                const gain = AudioSynth.ctx.createGain();
+                osc.type = type;
+                osc.frequency.value = freq;
+                osc.connect(gain);
+                gain.connect(AudioSynth.ctx.destination);
+                osc.start();
+                gain.gain.exponentialRampToValueAtTime(0.00001, AudioSynth.ctx.currentTime + duration);
+                osc.stop(AudioSynth.ctx.currentTime + duration);
+            },
+            playTick: () => AudioSynth.playTone(800, 'sine', 0.1),
+            playWin: () => [523.25, 659.25, 783.99, 1046.50].forEach((f, i) => setTimeout(() => AudioSynth.playTone(f, 'triangle', 0.5), i * 100)),
+            playCorrect: () => { AudioSynth.playTone(1000, 'sine', 0.2); setTimeout(() => AudioSynth.playTone(1500, 'sine', 0.4), 100); },
+            playWrong: () => AudioSynth.playTone(150, 'sawtooth', 0.4)
+        };
+
+        // --- FIREWORKS ---
+        const FireworkEffect = ({ active }) => {
+            const canvasRef = useRef(null);
+            useEffect(() => {
+                if (!active) return;
+                const canvas = canvasRef.current;
+                const ctx = canvas.getContext('2d');
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+                let particles = [];
+                const createParticle = (x, y) => {
+                    for (let i = 0; i < 30; i++) particles.push({ x, y, vx: (Math.random() - 0.5) * 10, vy: (Math.random() - 0.5) * 10, life: 100, color: `hsl(${Math.random() * 360}, 100%, 50%)` });
+                };
+                createParticle(canvas.width / 2, canvas.height / 2);
+                const animate = () => {
+                    if (!active) return;
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    particles.forEach((p, i) => {
+                        p.x += p.vx; p.y += p.vy; p.life--; p.vy += 0.1;
+                        ctx.fillStyle = p.color; ctx.fillRect(p.x, p.y, 4, 4);
+                        if (p.life <= 0) particles.splice(i, 1);
+                    });
+                    if (particles.length > 0) requestAnimationFrame(animate);
+                };
+                animate();
+            }, [active]);
+            if (!active) return null;
+            return <canvas ref={canvasRef} className="fixed inset-0 pointer-events-none z-50" />;
+        };
+
+        // --- LASER & RINGS ---
+        const StageBackground = () => (
+            <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
+                <div className="laser-container">
+                    <div className="laser-beam"></div>
+                    <div className="laser-beam laser-beam-2"></div>
+                </div>
+                {/* Visual Olympic Rings - Centered & Large */}
+                <div className="absolute inset-0 flex items-center justify-center opacity-60">
+                    <div className="relative w-full h-full">
+                        {/* Hàng trên: 3 vòng (Blue, Black, Red) - Y: 32vh */}
+                        <div className="olympic-ring border-blue-500" style={{ left: '28vw', top: '32vh', width: '24vw', height: '24vw' }}></div>
+                        <div className="olympic-ring border-slate-200" style={{ left: '50vw', top: '32vh', width: '24vw', height: '24vw' }}></div>
+                        <div className="olympic-ring border-red-600" style={{ left: '72vw', top: '32vh', width: '24vw', height: '24vw' }}></div>
+                        
+                        {/* Hàng dưới: 2 vòng (Yellow, Green) - Y: 32vh + 10vw */}
+                        <div className="olympic-ring border-yellow-400" style={{ left: '39vw', top: 'calc(32vh + 10vw)', width: '24vw', height: '24vw' }}></div>
+                        <div className="olympic-ring border-green-500" style={{ left: '61vw', top: 'calc(32vh + 10vw)', width: '24vw', height: '24vw' }}></div>
+                    </div>
+                </div>
+                {[...Array(50)].map((_, i) => (
+                    <div key={i} className="absolute rounded-full bg-white opacity-70 animate-pulse"
+                        style={{ top: `${Math.random() * 100}%`, left: `${Math.random() * 100}%`, width: `${Math.random() * 3}px`, height: `${Math.random() * 3}px`, animationDuration: `${Math.random() * 3 + 1}s` }}
+                    />
+                ))}
+            </div>
+        );
+
+        // --- MATH CONTENT ---
+        const MathContent = ({ content }) => {
+            const containerRef = useRef(null);
+            useEffect(() => {
+                if (containerRef.current) {
+                    containerRef.current.textContent = content;
+                    if (window.renderMathInElement) {
+                        try {
+                            window.renderMathInElement(containerRef.current, {
+                                delimiters: [{left: '$$', right: '$$', display: true}, {left: '$', right: '$', display: false}, {left: '\\(', right: '\\)', display: false}, {left: '\\[', right: '\\]', display: true}],
+                                throwOnError: false, macros: { "\\ce": "\\text{#1}" }
+                            });
+                        } catch (e) { console.error(e); }
+                    }
+                }
+            }, [content]);
+            return <span ref={containerRef} />;
+        };
+
+        const shuffleArray = (array) => {
+            const newArray = [...array];
+            for (let i = newArray.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+            }
+            return newArray;
+        };
+
+        // --- APP ---
+        function App() {
+            const [gameTitle, setGameTitle] = useState("VÒNG QUAY NGÔI SAO TRI THỨC");
+            
+            const currentTheme = {
+                bgClass: 'bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-slate-800 via-slate-900 to-black',
+                textClass: 'text-white',
+                accentColor: 'text-yellow-400',
+                buttonColor: 'bg-gradient-to-r from-yellow-400 to-orange-500 text-black',
+                hasStars: true
+            };
+
+            const getChibiAvatar = (seed) => `https://api.dicebear.com/9.x/adventurer/svg?seed=${seed}&backgroundColor=b6e3f4,c0aede,d1d4f9`;
+
+            const [players, setPlayers] = useState([
+                { id: 1, name: "Bé Cam", avatar: getChibiAvatar("Cam") },
+                { id: 2, name: "Bé Xoài", avatar: getChibiAvatar("Xoai") },
+                { id: 3, name: "Bé Dâu", avatar: getChibiAvatar("Dau") },
+                { id: 4, name: "Bé Mít", avatar: getChibiAvatar("Mit") },
+                { id: 5, name: "Bé Nho", avatar: getChibiAvatar("Nho") },
+                { id: 6, name: "Bé Táo", avatar: getChibiAvatar("Tao") },
+                { id: 7, name: "Bé Ổi", avatar: getChibiAvatar("Oi") },
+                { id: 8, name: "Bé Dừa", avatar: getChibiAvatar("Dua") },
+                { id: 9, name: "Bé Sữa", avatar: getChibiAvatar("Sua") },
+                { id: 10, name: "Bé Gạo", avatar: getChibiAvatar("Gao") },
+                { id: 11, name: "Bé Na", avatar: getChibiAvatar("Na") },
+                { id: 12, name: "Bé Mận", avatar: getChibiAvatar("Man") },
+            ]);
+
+            const [questions, setQuestions] = useState([
+                { id: 1, type: 'mcq', content: "Công thức tính năng lượng là gì?", options: ["$$E=mc^2$$", "$$F=ma$$", "$$U=IR$$", "$$P=mg$$"], correct: 0, used: false },
+                { id: 2, type: 'tf', content: "Phân tử nước là $$\\ce{H2O}$$.", correct: true, used: false },
+                { id: 3, type: 'text', content: "Giải phương trình: $$x^2 - 4 = 0$$. Nghiệm dương là?", correct: "2", used: false }
+            ]);
+
+            // Add media state
+            const [newQType, setNewQType] = useState('mcq');
+            const [newQContent, setNewQContent] = useState('');
+            const [newQOptions, setNewQOptions] = useState(['', '', '', '']);
+            const [newQCorrect, setNewQCorrect] = useState('');
+            const [newQMedia, setNewQMedia] = useState(null); // { type, url }
+
+            const [isSpinning, setIsSpinning] = useState(false);
+            const [highlightIndex, setHighlightIndex] = useState(-1);
+            const [winner, setWinner] = useState(null);
+            const [showSettings, setShowSettings] = useState(false);
+            const [showQuestionModal, setShowQuestionModal] = useState(false);
+            const [currentQuestion, setCurrentQuestion] = useState(null);
+            const [userAnswer, setUserAnswer] = useState("");
+            const [feedback, setFeedback] = useState(null); 
+            const [soundEnabled, setSoundEnabled] = useState(true);
+
+            // --- GET ORBIT INFO FOR PLAYER ---
+            const getOlympicOrbitInfo = (index, total) => {
+                const centers = [
+                    { x: '28vw', y: '32vh', color: 'border-blue-500', isCw: true },     
+                    { x: '39vw', y: 'calc(32vh + 10vw)', color: 'border-yellow-400', isCw: true }, 
+                    { x: '50vw', y: '32vh', color: 'border-slate-200', isCw: true },    
+                    { x: '61vw', y: 'calc(32vh + 10vw)', color: 'border-green-500', isCw: true }, 
+                    { x: '72vw', y: '32vh', color: 'border-red-600', isCw: true }       
+                ];
+                
+                const ringIndex = index % 5;
+                const center = centers[ringIndex];
+                let countInRing = 0, myPos = 0;
+                for(let i=0; i<total; i++) {
+                    if (i % 5 === ringIndex) { if (i === index) myPos = countInRing; countInRing++; }
+                }
+                const period = 20; 
+                const delay = -(period / countInRing) * myPos;
+                return { left: center.x, top: center.y, borderColor: center.color, animationName: 'orbit-cw', animationDelay: `${delay}s`, duration: `${period}s` };
+            };
+
+            // Actions
+            const handleShufflePlayers = () => setPlayers(shuffleArray(players));
+            const handleDeleteAllPlayers = () => { if (confirm("Xóa hết?")) setPlayers([]); };
+            const handleShuffleQuestions = () => setQuestions(shuffleArray(questions));
+            const handleDeleteAllQuestions = () => { if (confirm("Xóa hết?")) setQuestions([]); };
+            
+            // New: Restore Questions
+            const handleRestoreQuestions = () => {
+                if (confirm("Khôi phục tất cả câu hỏi đã dùng?")) {
+                    setQuestions(questions.map(q => ({...q, used: false})));
+                }
+            };
+
+            const spinWheel = () => {
+                if (players.length < 2) return alert("Cần ít nhất 2 người!");
+                if (soundEnabled) AudioSynth.init();
+                setIsSpinning(true); setWinner(null); setHighlightIndex(-1); setFeedback(null);
+                let speed = 50, counter = 0, currentIndex = 0, totalSpins = 30 + Math.floor(Math.random() * 20);
+                const step = () => {
+                    currentIndex = (currentIndex + 1) % players.length;
+                    setHighlightIndex(currentIndex);
+                    if (soundEnabled) AudioSynth.playTick();
+                    counter++;
+                    if (counter < totalSpins) {
+                        if (counter > totalSpins - 10) speed += 30; else if (counter > totalSpins - 20) speed += 10;
+                        setTimeout(step, speed);
+                    } else {
+                        setIsSpinning(false); setWinner(players[currentIndex]);
+                        if (soundEnabled) AudioSynth.playWin();
+                    }
+                };
+                step();
+            };
+
+            const handleRemoveWinner = () => { if (confirm(`Xóa "${winner.name}"?`)) { setPlayers(prev => prev.filter(p => p.id !== winner.id)); setWinner(null); } };
+            
+            // Updated Open Question Logic: Filter Used
+            const openRandomQuestion = () => {
+                const availableQs = questions.filter(q => !q.used);
+                if (availableQs.length === 0) return alert("Đã hết câu hỏi! Hãy vào Cấu hình để khôi phục.");
+                
+                const randomQ = availableQs[Math.floor(Math.random() * availableQs.length)];
+                
+                // Mark as used immediately
+                const updatedQuestions = questions.map(q => q.id === randomQ.id ? { ...q, used: true } : q);
+                setQuestions(updatedQuestions);
+                
+                setCurrentQuestion(randomQ); setUserAnswer(""); setFeedback(null); setShowQuestionModal(true);
+            };
+            
+            const checkAnswer = () => {
+                if (!currentQuestion) return;
+                let isCorrect = false;
+                if (currentQuestion.type === 'mcq') isCorrect = parseInt(userAnswer) === currentQuestion.correct;
+                else if (currentQuestion.type === 'tf') isCorrect = (userAnswer === 'true') === currentQuestion.correct;
+                else isCorrect = userAnswer.trim().toLowerCase() === currentQuestion.correct.toLowerCase();
+                setFeedback(isCorrect ? 'correct' : 'wrong');
+                if (soundEnabled) isCorrect ? AudioSynth.playCorrect() : AudioSynth.playWrong();
+            };
+
+            const handleMediaUpload = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const url = URL.createObjectURL(file);
+                let type = 'image';
+                if (file.type.startsWith('video/')) type = 'video';
+                if (file.type.startsWith('audio/')) type = 'audio';
+                setNewQMedia({ type, url, name: file.name });
+            };
+
+            const handleAddQuestion = () => {
+                if (!newQContent.trim() && !newQMedia) return alert("Nhập nội dung hoặc chọn media!");
+                let qData = { id: Date.now(), type: newQType, content: newQContent, used: false };
+                if (newQMedia) qData.media = newQMedia;
+
+                if (newQType === 'mcq') {
+                    if (newQOptions.some(o => !o.trim()) || newQCorrect === '') return alert("Thiếu đáp án!");
+                    qData.options = [...newQOptions]; qData.correct = parseInt(newQCorrect);
+                } else if (newQType === 'tf') {
+                    if (newQCorrect === '') return alert("Chọn Đúng/Sai!");
+                    qData.correct = newQCorrect === 'true';
+                } else {
+                    if (!newQCorrect.trim()) return alert("Nhập đáp án!");
+                    qData.correct = newQCorrect.trim();
+                }
+                setQuestions([...questions, qData]); 
+                setNewQContent(''); setNewQOptions(['','','','']); setNewQCorrect(''); setNewQMedia(null);
+                alert("Đã thêm!");
+            };
+
+            const handleBatchQuestionImport = () => {
+                const text = document.getElementById('qBatchInput').value; if(!text.trim()) return;
+                const lines = text.split(/\r?\n/).filter(l => l.trim());
+                const newQs = lines.map((line, idx) => {
+                    const p = line.split(/\t|\|/).map(s=>s.trim()).filter(s=>s);
+                    let base = { id: Date.now()+idx, content: p[0], used: false };
+                    if(p.length>=5) {
+                        const correct = p[1], pool = [correct, ...p.slice(2,5)];
+                        for(let i=pool.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[pool[i],pool[j]]=[pool[j],pool[i]];}
+                        return { ...base, type:'mcq', options:pool, correct:pool.indexOf(correct)};
+                    }
+                    if(p.length>=2) {
+                        const a = p[1].toLowerCase();
+                        if(['đúng','true','d','t'].includes(a)) return { ...base, type:'tf', correct:true};
+                        if(['sai','false','s','f'].includes(a)) return { ...base, type:'tf', correct:false};
+                        return { ...base, type:'text', correct:p[1]};
+                    }
+                    return { ...base, type:'text', correct:"..."};
+                });
+                setQuestions([...questions, ...newQs]); document.getElementById('qBatchInput').value=""; alert(`Thêm ${newQs.length} câu!`);
+            };
+
+            const handleBatchImageUpload = (e) => {
+                const files = Array.from(e.target.files); if(!files.length) return;
+                const newPs = files.map((f,i)=>({id:Date.now()+i, name:f.name.replace(/\.[^/.]+$/,""), avatar:URL.createObjectURL(f)}));
+                setPlayers([...players, ...newPs]); e.target.value=null; alert(`Thêm ${newPs.length} người!`);
+            };
+            const handleBatchImport = (text) => {
+                const lines = text.split(/\r?\n/).filter(l=>l.trim());
+                const newPs = lines.map((n,i)=>({id:Date.now()+i, name:n.trim(), avatar:getChibiAvatar(n.trim())}));
+                setPlayers([...players, ...newPs]);
+            };
+            const handleImageUpload = (e,pid) => {
+                const f = e.target.files[0]; if(f) setPlayers(players.map(p=>p.id===pid?{...p, avatar:URL.createObjectURL(f)}:p));
+            };
+
+            const avatarSize = players.length > 20 ? '3vw' : players.length > 10 ? '4vw' : '5vw';
+
+            return (
+                <div className="relative min-h-screen font-sans overflow-hidden select-none bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-slate-800 via-slate-900 to-black text-white">
+                    <StageBackground />
+
+                    {/* HEADER */}
+                    <div className="relative z-10 flex justify-between items-start p-4 backdrop-blur-sm bg-black/10 border-b border-white/10 h-[100px] pointer-events-auto">
+                        <div className="flex items-center gap-2">
+                            <Icons.Star className="w-6 h-6 animate-spin-slow text-yellow-400 fill-current" />
+                            <h1 className="text-xl md:text-2xl font-bold filter drop-shadow-lg text-yellow-400">{gameTitle}</h1>
+                        </div>
+                        <div className="flex flex-col items-end gap-1">
+                            <div className="flex gap-2">
+                                <button onClick={() => setSoundEnabled(!soundEnabled)} className="p-1.5 rounded-full hover:bg-white/10 transition">{soundEnabled ? <Icons.Volume2 size={16} /> : <Icons.VolumeX size={16} />}</button>
+                                <button onClick={() => setShowSettings(true)} className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg shadow-lg active:scale-95 text-xs"><Icons.Settings className="w-4 h-4" /><span className="hidden md:inline">Cấu hình</span></button>
+                            </div>
+                            <span className="text-[10px] md:text-xs text-white/30 font-mono italic mr-1">Tạo bởi: Phương Đoàn</span>
+                            
+                            {!winner && !showSettings && !showQuestionModal && (
+                                <div className="flex flex-col gap-2 mt-2 pointer-events-auto">
+                                    <button disabled={isSpinning} onClick={spinWheel} className="w-32 px-3 py-1.5 rounded-lg font-bold text-xs uppercase shadow-lg transition-all transform hover:scale-105 active:scale-95 disabled:opacity-50 bg-gradient-to-r from-yellow-400 to-orange-500 text-black flex items-center justify-center gap-2">
+                                        <Icons.Play className={isSpinning ? "animate-spin" : ""} size={14} /> QUAY NGAY
+                                    </button>
+                                    <button disabled={isSpinning} onClick={openRandomQuestion} className="w-32 px-3 py-1.5 rounded-lg font-bold text-xs bg-slate-700 hover:bg-slate-600 text-white shadow-lg transition-all transform hover:scale-105 active:scale-95 flex items-center justify-center gap-2">
+                                        <Icons.HelpCircle size={14} /> Câu Hỏi
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* MAIN SCREEN (ORBIT) */}
+                    <div className="absolute inset-0 z-10 overflow-hidden pointer-events-none">
+                         {!winner && players.map((player, index) => {
+                                    const orbit = getOlympicOrbitInfo(index, players.length);
+                                    return (
+                                        <div key={player.id} className="absolute" style={{ left: orbit.left, top: orbit.top, width: 0, height: 0 }}>
+                                            <div style={{ animation: `${orbit.animationName} ${orbit.duration} linear infinite`, animationDelay: orbit.animationDelay }}>
+                                                <div className={`flex flex-col items-center justify-center p-1 rounded-full transition-all duration-300 transform ${index === highlightIndex ? 'scale-150 z-50 border-4 border-white shadow-[0_0_30px_rgba(255,255,255,1)] bg-yellow-500' : `bg-white/10 border-4 ${orbit.borderColor}`}`} style={{ width: avatarSize, height: avatarSize, minWidth: '50px', minHeight: '50px', animation: `orbit-ccw ${orbit.duration} linear infinite`, animationDelay: orbit.animationDelay }}>
+                                                    <div className="w-full h-full rounded-full bg-slate-800 overflow-hidden flex items-center justify-center">
+                                                        {player.avatar ? <img src={player.avatar} className="w-full h-full object-cover" /> : <span className="text-xl">👤</span>}
+                                                    </div>
+                                                    <span className="absolute -bottom-5 w-24 text-center font-bold text-[10px] md:text-xs bg-black/60 rounded px-1 truncate pointer-events-none border border-white/20 text-white shadow-sm">
+                                                        {player.name}
+                                                    </span>
+                                                    {index === highlightIndex && <div className="absolute -top-4 -right-4 text-yellow-300 animate-ping">✨</div>}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                    </div>
+
+                    <div className="relative z-20 flex flex-col h-screen pointer-events-none">
+                        <div className="h-[100px]"></div>
+                        <div className="flex-1 flex items-center justify-center pointer-events-auto">
+                            {winner && !isSpinning && (
+                                <div className="flex flex-col items-center justify-center animate-zoomIn z-50">
+                                    <div className="relative group">
+                                        <div className="absolute -inset-1 rounded-full blur opacity-75 animate-tilt bg-gradient-to-r from-yellow-400 to-pink-600"></div>
+                                        <div className="relative w-64 h-64 md:w-80 md:h-80 rounded-full border-4 border-yellow-400 bg-slate-800 flex items-center justify-center overflow-hidden shadow-2xl">
+                                            {winner.avatar ? <img src={winner.avatar} className="w-full h-full object-cover" /> : <span className="text-8xl">👤</span>}
+                                        </div>
+                                    </div>
+                                    <h2 className="mt-8 text-4xl md:text-5xl font-bold text-center drop-shadow-md animate-bounce text-yellow-400">{winner.name}</h2>
+                                    <div className="mt-8 flex flex-wrap justify-center gap-4">
+                                        <button onClick={() => setWinner(null)} className="px-6 py-3 bg-slate-600/80 hover:bg-slate-500 text-white rounded-full font-bold flex items-center gap-2"><Icons.RefreshCw size={20} /> Quay Lại</button>
+                                        <button onClick={handleRemoveWinner} className="px-6 py-3 bg-red-600/80 hover:bg-red-500 text-white rounded-full font-bold flex items-center gap-2 shadow-lg"><Icons.UserMinus size={20} /> Xóa người này</button>
+                                        <button onClick={openRandomQuestion} className="px-8 py-3 rounded-full font-bold shadow-lg transform hover:scale-105 flex items-center gap-2 text-white bg-gradient-to-r from-purple-500 to-pink-500"><Icons.HelpCircle /> Mở Câu Hỏi</button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* MODALS */}
+                    {showQuestionModal && currentQuestion && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4 pointer-events-auto">
+                            <FireworkEffect active={feedback === 'correct'} />
+                            <div className={`w-full md:w-2/3 max-h-[90vh] overflow-y-auto bg-blue-900 text-white border-4 border-white rounded-3xl p-8 md:p-12 shadow-2xl relative ${feedback === 'wrong'?'animate-shake border-red-500':''} ${feedback==='correct'?'border-green-500 shadow-[0_0_50px_rgba(34,197,94,0.5)]':''}`}>
+                                <button onClick={()=>setShowQuestionModal(false)} className="absolute top-6 right-6 text-slate-300 hover:text-white bg-blue-800 rounded-full p-2"><Icons.X size={32}/></button>
+                                
+                                <div className="mb-6 flex flex-col items-center">
+                                    {currentQuestion.media && (
+                                        <div className="mb-4 w-full max-w-lg rounded-lg overflow-hidden border-2 border-slate-500 shadow-lg">
+                                            {currentQuestion.media.type === 'image' && <img src={currentQuestion.media.url} alt="Question Media" className="w-full h-auto" />}
+                                            {currentQuestion.media.type === 'video' && <video src={currentQuestion.media.url} controls className="w-full h-auto" />}
+                                            {currentQuestion.media.type === 'audio' && <div className="p-4 bg-slate-800"><audio src={currentQuestion.media.url} controls className="w-full" /></div>}
+                                        </div>
+                                    )}
+                                    <span className="inline-block px-4 py-2 rounded-full bg-blue-700 border border-blue-500 text-blue-200 text-lg font-bold mb-4 uppercase tracking-widest shadow-sm">{currentQuestion.type==='mcq'?'Trắc nghiệm':currentQuestion.type==='tf'?'Đúng / Sai':'Tự luận'}</span>
+                                    <h3 className="font-bold leading-tight text-center" style={{fontSize:'32px'}}><MathContent content={currentQuestion.content}/></h3>
+                                </div>
+
+                                <div className="space-y-6">
+                                    {currentQuestion.type === 'mcq' && (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                            {currentQuestion.options.map((opt, idx) => (
+                                                <button key={idx} onClick={() => setUserAnswer(idx.toString())} className={`p-6 rounded-2xl text-left transition-all border-4 text-2xl ${parseInt(userAnswer) === idx ? 'bg-yellow-500 border-yellow-300 text-black shadow-lg transform scale-105' : 'bg-blue-800 border-blue-700 hover:bg-blue-700 text-white'}`} disabled={feedback !== null}>
+                                                    <span className="font-bold mr-3 text-yellow-300">{String.fromCharCode(65 + idx)}.</span> <MathContent content={opt} />
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                    {currentQuestion.type === 'tf' && (
+                                        <div className="flex gap-6">
+                                            {['true', 'false'].map(val => (
+                                                <button key={val} onClick={() => setUserAnswer(val)} className={`flex-1 p-8 rounded-2xl font-bold text-3xl border-4 transition-all ${userAnswer === val ? (val === 'true' ? 'bg-green-600 border-green-400' : 'bg-red-600 border-red-400') : 'bg-blue-800 border-blue-700 hover:bg-blue-700'}`} disabled={feedback !== null}>
+                                                    {val === 'true' ? 'ĐÚNG' : 'SAI'}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                    {currentQuestion.type === 'text' && (
+                                        <input type="text" value={userAnswer} onChange={(e) => setUserAnswer(e.target.value)} placeholder="Nhập câu trả lời..." className="w-full p-6 rounded-2xl bg-blue-950 border-4 border-blue-700 text-white focus:border-yellow-400 focus:outline-none text-3xl placeholder-blue-400/50" disabled={feedback !== null} />
+                                    )}
+                                    <div className="mt-10 pt-6 border-t border-blue-800 flex justify-center gap-4">
+                                        {feedback === null ? (
+                                            <button onClick={checkAnswer} className="px-12 py-4 bg-yellow-500 hover:bg-yellow-400 text-black font-black text-2xl rounded-2xl shadow-xl hover:scale-105">KIỂM TRA</button>
+                                        ) : (
+                                            <div className={`flex flex-col items-center gap-4 text-3xl font-bold ${feedback==='correct'?'text-green-400':'text-red-400'}`}>
+                                                <div className="flex items-center gap-3">{feedback==='correct'?<><Icons.Check className="w-12 h-12"/> CHÍNH XÁC!</>:<><Icons.AlertCircle className="w-12 h-12"/> SAI RỒI!</>}</div>
+                                                <button onClick={()=>setShowQuestionModal(false)} className="px-8 py-3 bg-blue-800 border border-blue-600 hover:bg-blue-700 rounded-xl text-xl text-white shadow-lg mt-2">Đóng</button>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {showSettings && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md p-4 text-white pointer-events-auto">
+                            <div className="w-full max-w-5xl bg-slate-900 border border-slate-700 rounded-xl shadow-2xl h-[90vh] flex flex-col">
+                                <div className="p-6 border-b border-slate-700 flex justify-between items-center bg-slate-800 rounded-t-xl">
+                                    <h2 className="text-2xl font-bold text-white flex items-center gap-2"><Icons.Settings /> Cấu Hình</h2>
+                                    <button onClick={() => setShowSettings(false)} className="text-slate-400 hover:text-white"><Icons.X /></button>
+                                </div>
+                                <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
+                                    <section className="bg-slate-800/50 p-6 rounded-xl border border-slate-700">
+                                        <h3 className="text-xl font-bold text-yellow-400 mb-4 flex items-center gap-2"><Icons.Edit size={24}/> Tên Trò Chơi</h3>
+                                        <input value={gameTitle} onChange={(e) => setGameTitle(e.target.value)} className="w-full bg-slate-950 border border-slate-600 rounded px-4 py-3 text-lg text-white focus:border-yellow-500 outline-none" placeholder="Nhập tên trò chơi..." />
+                                    </section>
+                                    <section>
+                                        <div className="flex justify-between items-center mb-4">
+                                            <h3 className="text-xl font-semibold text-blue-400 flex items-center gap-2"><span className="bg-blue-900/50 px-3 py-1 rounded">1</span> Người Chơi ({players.length})</h3>
+                                            <div className="flex gap-2">
+                                                <button onClick={handleShufflePlayers} className="px-3 py-1.5 bg-yellow-600 hover:bg-yellow-500 rounded font-bold flex gap-1"><Icons.Shuffle size={14}/> Trộn</button>
+                                                <button onClick={handleDeleteAllPlayers} className="px-3 py-1.5 bg-red-600 hover:bg-red-500 rounded font-bold flex gap-1"><Icons.Trash2 size={14}/> Xóa Hết</button>
+                                            </div>
+                                        </div>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                                            <div className="bg-slate-800 p-4 rounded-lg border border-purple-500/30">
+                                                <p className="text-sm text-purple-300 font-bold mb-2 flex items-center gap-2"><Icons.FolderPlus size={18}/> Từ Ảnh (Tên file = Tên):</p>
+                                                <label className="cursor-pointer bg-purple-600 hover:bg-purple-500 px-4 py-3 rounded-lg font-bold flex items-center justify-center gap-2 shadow-lg"><Icons.ImageIcon size={20} /> <span>Chọn Ảnh</span><input type="file" multiple accept="image/*" className="hidden" onChange={handleBatchImageUpload} /></label>
+                                            </div>
+                                            <div className="bg-slate-800 p-4 rounded-lg border border-blue-500/30">
+                                                <p className="text-sm text-blue-300 font-bold mb-2 flex items-center gap-2"><Icons.FileText size={18}/> Nhập tên:</p>
+                                                <div className="flex gap-2"><textarea id="batchInput" placeholder="Dán tên..." className="flex-1 bg-slate-950 border border-slate-700 rounded p-2 text-sm h-12 focus:border-blue-500 outline-none text-white" /><button onClick={() => { const val = document.getElementById('batchInput').value; if(val) { handleBatchImport(val); document.getElementById('batchInput').value = ""; } }} className="bg-blue-600 px-3 rounded font-bold text-sm hover:bg-blue-500"><Icons.Plus size={16}/></button></div>
+                                            </div>
+                                        </div>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">{players.map(p => (<div key={p.id} className="bg-slate-800 p-3 rounded flex items-center gap-3 border border-slate-700"><label className="cursor-pointer"><div className="w-10 h-10 rounded-full bg-slate-600 overflow-hidden">{p.avatar ? <img src={p.avatar} className="w-full h-full object-cover"/> : <span className="flex items-center justify-center h-full text-xs">IMG</span>}</div><input type="file" className="hidden" accept="image/*" onChange={(e) => handleImageUpload(e, p.id)} /></label><input className="flex-1 bg-transparent border-b border-transparent focus:border-blue-500 outline-none text-sm py-1 text-white" value={p.name} onChange={(e) => setPlayers(players.map(pl => pl.id === p.id ? {...pl, name: e.target.value} : pl))} /><button onClick={() => setPlayers(players.filter(pl => pl.id !== p.id))} className="text-red-400 hover:text-red-300"><Icons.Trash2 size={16}/></button></div>))}</div>
+                                    </section>
+                                    <section className="border-t border-slate-700 pt-6">
+                                        <div className="flex justify-between items-center mb-4">
+                                            <h3 className="text-xl font-semibold text-pink-400 flex items-center gap-2"><span className="bg-pink-900/50 px-3 py-1 rounded">2</span> Câu Hỏi ({questions.length})</h3>
+                                            <div className="flex gap-2">
+                                                <button onClick={handleRestoreQuestions} className="px-3 py-1.5 bg-green-600 hover:bg-green-500 rounded font-bold flex gap-1 text-xs items-center"><Icons.RefreshCw size={14}/> Khôi phục đã dùng</button>
+                                                <button onClick={handleShuffleQuestions} className="px-3 py-1.5 bg-yellow-600 hover:bg-yellow-500 rounded font-bold flex gap-1"><Icons.Shuffle size={14}/> Trộn</button>
+                                                <button onClick={handleDeleteAllQuestions} className="px-3 py-1.5 bg-red-600 hover:bg-red-500 rounded font-bold flex gap-1"><Icons.Trash2 size={14}/> Xóa Hết</button>
+                                            </div>
+                                        </div>
+                                        <div className="bg-slate-800 border border-slate-600 rounded-lg p-4 mb-6 shadow-md"><h4 className="font-bold text-green-400 mb-2 flex items-center gap-2"><Icons.FileSpreadsheet size={18}/> Nhập Excel</h4><div className="text-xs text-slate-400 mb-3"><p>Format: Câu hỏi | Đáp án 1 | ... (Hỗ trợ $$...$$)</p></div><textarea id="qBatchInput" placeholder="Ví dụ: 1+1=? | 2" className="w-full bg-slate-950 border border-slate-700 rounded p-3 mb-2 text-white focus:border-green-500 outline-none text-sm font-mono h-24" /><div className="flex justify-end"><button onClick={handleBatchQuestionImport} className="px-4 py-2 bg-green-600 hover:bg-green-500 text-white rounded font-bold text-sm">Thêm</button></div></div>
+                                        <div className="bg-slate-800 border border-slate-600 rounded-lg p-4 mb-6 shadow-md">
+                                            <h4 className="font-bold text-white mb-3 flex items-center gap-2"><Icons.Plus size={16}/> Thêm Thủ Công</h4>
+                                            
+                                            {/* Media Upload */}
+                                            <div className="mb-4 p-3 bg-slate-900 rounded border border-slate-700">
+                                                <p className="text-xs text-blue-300 mb-2 font-bold flex items-center gap-1"><Icons.Film size={14}/> Thêm Media (Ảnh/Video/Nhạc):</p>
+                                                <div className="flex gap-2 items-center">
+                                                    <label className="cursor-pointer bg-blue-700 hover:bg-blue-600 px-3 py-2 rounded text-xs font-bold">
+                                                        Chọn File <input type="file" accept="image/*,video/*,audio/*" className="hidden" onChange={handleMediaUpload} />
+                                                    </label>
+                                                    <span className="text-xs text-slate-400 truncate flex-1">{newQMedia ? newQMedia.name : "Chưa chọn file"}</span>
+                                                    {newQMedia && <button onClick={() => setNewQMedia(null)} className="text-red-400 hover:text-red-300"><Icons.X size={14}/></button>}
+                                                </div>
+                                            </div>
+
+                                            <div className="flex gap-4 mb-3"><label className="cursor-pointer hover:text-blue-300"><input type="radio" name="qType" value="mcq" checked={newQType === 'mcq'} onChange={() => setNewQType('mcq')} /> TN</label><label className="cursor-pointer hover:text-green-300"><input type="radio" name="qType" value="tf" checked={newQType === 'tf'} onChange={() => setNewQType('tf')} /> Đ/S</label><label className="cursor-pointer hover:text-purple-300"><input type="radio" name="qType" value="text" checked={newQType === 'text'} onChange={() => setNewQType('text')} /> Tự luận</label></div><textarea placeholder="Nội dung..." className="w-full bg-slate-950 border border-slate-700 rounded p-3 mb-3 text-white focus:border-blue-500 outline-none" rows={2} value={newQContent} onChange={(e) => setNewQContent(e.target.value)} />{newQType === 'mcq' && <div className="space-y-2 mb-3"><p className="text-xs text-slate-400">4 đáp án:</p>{newQOptions.map((opt, i) => (<div key={i} className="flex items-center gap-2"><input type="radio" name="mcqCorrect" checked={parseInt(newQCorrect) === i} onChange={() => setNewQCorrect(i)} /><input className="flex-1 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-sm focus:border-blue-500 outline-none text-white" value={opt} onChange={(e) => { const newOpts = [...newQOptions]; newOpts[i] = e.target.value; setNewQOptions(newOpts); }} /></div>))}</div>}{newQType === 'tf' && <div className="flex gap-4 mb-3"><label className="flex items-center gap-2 cursor-pointer"><input type="radio" name="tfCorrect" value="true" checked={newQCorrect === 'true'} onChange={() => setNewQCorrect('true')} /> Đúng</label><label className="flex items-center gap-2 cursor-pointer"><input type="radio" name="tfCorrect" value="false" checked={newQCorrect === 'false'} onChange={() => setNewQCorrect('false')} /> Sai</label></div>}{newQType === 'text' && <div className="mb-3"><input className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-sm focus:border-blue-500 outline-none text-white" placeholder="Đáp án đúng..." value={newQCorrect} onChange={(e) => setNewQCorrect(e.target.value)} /></div>}<div className="flex justify-end"><button onClick={handleAddQuestion} className="px-4 py-2 bg-pink-600 hover:bg-pink-500 text-white rounded font-bold flex items-center gap-2 shadow-lg"><Icons.Save size={16} /> Lưu</button></div></div>
+                                        <div className="space-y-3">{questions.map((q, idx) => (<div key={q.id} className={`bg-slate-800 p-4 rounded-lg border relative ${q.used ? 'border-gray-600 opacity-60' : 'border-slate-700'}`}><div className="absolute top-4 right-4 flex gap-2">{q.used && <span className="text-[10px] bg-gray-700 px-2 py-1 rounded">Đã dùng</span>}<button onClick={() => setQuestions(questions.filter(qi => qi.id !== q.id))} className="text-red-400 hover:text-red-300"><Icons.Trash2 size={16}/></button></div><span className="text-xs font-bold px-2 py-0.5 rounded uppercase bg-blue-900 text-blue-300">{q.type}</span><p className="font-semibold text-white mt-2 mb-2"><MathContent content={q.content} /></p></div>))}</div>
+                                    </section>
+                                </div>
+                                <div className="p-6 border-t border-slate-700 flex justify-end"><button onClick={() => setShowSettings(false)} className="px-6 py-2 bg-green-600 hover:bg-green-500 text-white rounded font-bold shadow-lg">Lưu & Đóng</button></div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
